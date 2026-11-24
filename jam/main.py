@@ -1,4 +1,5 @@
 import argparse
+import gc
 import os
 import sys
 import tempfile
@@ -56,7 +57,7 @@ def run_self_test() -> int:
     Verify all bundled native subsystems (used in CI on Windows to verify JAM.exe
     unpacks and loads ChromaDB, llama.cpp, OpenCV cascades, and Textual cleanly).
     """
-    from jam.core.inference import LLAMA_AVAILABLE, JamInferenceEngine
+    from jam.core.inference import LLAMA_AVAILABLE, LLAMA_IMPORT_ERROR, JamInferenceEngine
     from jam.core.recommender import ModelRecommender
     from jam.hardware.detector import HardwareDetector
     from jam.memory.vector_db import JamMemory, LocalHashEmbeddingFunction
@@ -65,16 +66,21 @@ def run_self_test() -> int:
     report = HardwareDetector().get_full_report()
     recs = ModelRecommender(report).get_recommendations()
     assert recs["generator"]["name"] in JamInferenceEngine.MODEL_MAPPING
-    assert LLAMA_AVAILABLE, "llama-cpp-python native library failed to load"
+    assert LLAMA_AVAILABLE, f"llama-cpp-python native library failed to load: {LLAMA_IMPORT_ERROR}"
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         mem = JamMemory(
             db_path=os.path.join(tmpdir, "memory"),
             embedding_function=LocalHashEmbeddingFunction(),
         )
-        res = mem.upsert_user_fact("Self-test fact for JAM")
-        assert res["action"] == "added"
-        assert len(mem.recall_user_facts("Self-test fact")) == 1
+        try:
+            res = mem.upsert_user_fact("Self-test fact for JAM")
+            assert res["action"] == "added"
+            assert len(mem.recall_user_facts("Self-test fact")) == 1
+        finally:
+            mem.close()
+            del mem
+            gc.collect()
 
         face = JamFaceAuth(faces_dir=os.path.join(tmpdir, "faces"))
         assert face.is_available(), "OpenCV Haar cascade failed to load"

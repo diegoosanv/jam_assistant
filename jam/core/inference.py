@@ -5,13 +5,15 @@ from huggingface_hub import hf_hub_download
 
 # Encapsulamos la importación en un try-except porque compilar llama-cpp-python
 # puede ser complejo dependiendo de la plataforma del usuario (CUDA vs Metal).
+LLAMA_IMPORT_ERROR: Optional[str] = None
 try:
     from llama_cpp import Llama
 
     LLAMA_AVAILABLE = True
-except ImportError:
+except Exception as _llama_exc:
     Llama = None
     LLAMA_AVAILABLE = False
+    LLAMA_IMPORT_ERROR = str(_llama_exc)
 
 
 class JamInferenceEngine:

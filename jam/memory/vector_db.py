@@ -838,3 +838,18 @@ class JamMemory:
             "user_space": self._collection_space(self.user_collection),
             "chat_space": self._collection_space(self.chat_collection),
         }
+
+    def close(self) -> None:
+        """Release underlying ChromaDB/SQLite handles cleanly (important on Windows)."""
+        try:
+            system = getattr(self.client, "_system", None)
+            if system is not None and hasattr(system, "stop"):
+                system.stop()
+        except Exception:
+            pass
+        try:
+            clear_cache = getattr(self.client, "clear_system_cache", None)
+            if callable(clear_cache):
+                clear_cache()
+        except Exception:
+            pass
