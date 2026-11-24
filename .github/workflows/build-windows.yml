@@ -1,0 +1,69 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "master", "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout del código
+      uses: actions/checkout@v4
+
+    - name: Configurar Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar dependencias (wheel binario CPU garantizado en Windows)
+      run: |
+        python -m pip install --upgrade pip
+        pip install --only-binary=llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+        pip install -r requirements.txt
+        pip install pyinstaller pytest
+
+    - name: Ejecutar pruebas automatizadas
+      run: |
+        pytest -v
+
+    - name: Compilar JAM.exe con icono y librerías nativas
+      run: |
+        pyinstaller --name "JAM" --onefile --icon "assets/jam_logo.ico" --paths . --add-data "assets;assets" --collect-submodules jam --collect-all textual --collect-all rich --collect-all chromadb --collect-all llama_cpp --collect-all pydantic --collect-all huggingface_hub --collect-all onnxruntime --collect-all tokenizers --collect-all cv2 jam/main.py
+
+    - name: Verificar JAM.exe compilado en Windows (self-test)
+      run: |
+        .\dist\JAM.exe --self-test
+
+    - name: Crear paquete portable ZIP para compartir
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path release_pkg | Out-Null
+        Copy-Item dist/JAM.exe release_pkg/JAM.exe
+        @"
+        JAM (Just Another Mind) - Portable Windows Edition
+        ==================================================
+
+        1. Descomprime esta carpeta en un lugar fijo (por ejemplo: C:\JAM\).
+        2. Haz doble clic en JAM.exe (si Windows SmartScreen pregunta, elige "Más información" -> "Ejecutar de todas formas").
+        3. Elige idioma ([1] Español / [2] English) e ingresa tu clave de licencia (formato JAM-XXXX-YYYY-ZZZZ).
+        4. En el primer inicio descargará automáticamente el modelo IA local sin censura adecuado para tu PC y guardará tus memorias en jam_data\ junto a JAM.exe.
+        5. Atajos útiles dentro de JAM:
+           - Ctrl+L  : Alternar entre Chat limpio y pestaña de Logs técnicos
+           - /help   : Ver comandos disponibles
+           - /memory : Ver memorias guardadas
+           - /face   : Registrar o verificar tu rostro con la cámara web
+           - Ctrl+C  : Salir
+        "@ | Set-Content -Encoding UTF8 release_pkg/LEEME.txt
+        Compress-Archive -Path release_pkg/* -DestinationPath dist/JAM-Windows-Portable.zip -Force
+
+    - name: Subir JAM.exe y paquete portable
+      uses: actions/upload-artifact@v4
+      with:
+        name: JAM-Windows-Executable
+        path: |
+          dist/JAM.exe
+          dist/JAM-Windows-Portable.zip

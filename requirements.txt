@@ -1,0 +1,6 @@
+psutil
+textual
+chromadb
+huggingface_hub
+llama-cpp-python
+opencv-contrib-python-headless
